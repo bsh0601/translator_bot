@@ -33,6 +33,7 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# 번역용 언어코드 (deep-translator용)
 language_map = {
     "중국어": "zh-cn",
     "영어": "en",
@@ -154,12 +155,24 @@ async def on_message(message):
         return
 
     try:
-        translated = GoogleTranslator(source='auto', target=target_language).translate(message.content)
-        tts_lang = target_language
-    except:
-        translated = GoogleTranslator(source='auto', target='ko').translate(message.content)
-        tts_lang = 'ko'
+        # 번역 (deep-translator는 소문자 사용)
+        translated = GoogleTranslator(
+            source='auto',
+            target=target_language
+        ).translate(message.content)
 
+        # gTTS용 언어코드 변환
+        if target_language == "zh-cn":
+            tts_lang = "zh-CN"
+        else:
+            tts_lang = target_language
+
+    except Exception as e:
+        print("번역 오류:", e)
+        translated = GoogleTranslator(source='auto', target='ko').translate(message.content)
+        tts_lang = "ko"
+
+    # 음성 생성
     tts = gTTS(text=translated, lang=tts_lang)
     tts.save("voice.mp3")
 
