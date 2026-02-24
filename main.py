@@ -3,11 +3,10 @@ from discord.ext import commands, tasks
 from deep_translator import GoogleTranslator
 from gtts import gTTS
 import os
-import asyncio
 import time
 import json
 
-# 봇 토큰 (환경 변수 사용)
+# ----------------- 기본 설정 -----------------
 TOKEN = os.environ["DISCORD_TOKEN"]
 SETTINGS_FILE = "settings.json"
 
@@ -16,7 +15,6 @@ intents.message_content = True
 intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-translator = Translator()
 
 language_map = {
     "중국어": "zh-cn",
@@ -46,21 +44,21 @@ def load_settings():
             target_language = data.get("target_language", "zh-cn")
             tts_channel_id = data.get("tts_channel_id", None)
 
-# ----------------- 봇 이벤트 -----------------
+# ----------------- 봇 준비 완료 -----------------
 @bot.event
 async def on_ready():
     load_settings()
     print(f"{bot.user} 준비 완료!")
     auto_disconnect.start()
 
-# ----------------- 자동 퇴장 -----------------
+# ----------------- 자동 퇴장 (10분) -----------------
 @tasks.loop(minutes=1)
 async def auto_disconnect():
     global last_used_time
     if last_used_time is None:
         return
     
-    if time.time() - last_used_time > 600:  # 10분
+    if time.time() - last_used_time > 600:
         for guild in bot.guilds:
             if guild.voice_client:
                 await guild.voice_client.disconnect()
@@ -70,7 +68,6 @@ async def auto_disconnect():
 # ----------------- 명령어 -----------------
 @bot.command()
 async def 언어(ctx, lang_name):
-    """번역 언어 설정"""
     global target_language
     
     if lang_name in language_map:
@@ -82,7 +79,6 @@ async def 언어(ctx, lang_name):
 
 @bot.command()
 async def 채널지정(ctx):
-    """TTS 채널 지정"""
     global tts_channel_id
     tts_channel_id = ctx.channel.id
     save_settings()
@@ -90,17 +86,15 @@ async def 채널지정(ctx):
 
 @bot.command()
 async def 퇴장(ctx):
-    """음성 채널에서 나가기"""
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.send("음성채널에서 나갔습니다.")
 
 @bot.command()
 async def 명령어(ctx):
-    """사용 가능한 명령어 안내"""
     commands_list = """
 현재 사용 가능한 명령어:
-1️⃣ !언어 중국어/영어/일본어 → TTS 번역 언어 설정
+1️⃣ !언어 중국어/영어/일본어 → 번역 언어 설정
 2️⃣ !채널지정 → 이 채널에서만 TTS 작동
 3️⃣ !퇴장 → 봇 음성 채널에서 나가기
 """
@@ -142,8 +136,6 @@ async def on_message(message):
     if is_tts_playing:
         await message.reply("아직 기존 TTS가 끝나지 않았어요.")
         return
-
-    detected = translator.detect(message.content)
 
     try:
         translated = GoogleTranslator(source='auto', target=target_language).translate(message.content)
