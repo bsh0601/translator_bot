@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands, tasks
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 from gtts import gTTS
 import os
 import asyncio
@@ -145,14 +145,14 @@ async def on_message(message):
 
     detected = translator.detect(message.content)
 
-    if detected.lang == "ko":
-        translated = translator.translate(message.content, dest=target_language)
+    try:
+        translated = GoogleTranslator(source='auto', target=target_language).translate(message.content)
         tts_lang = target_language
-    else:
-        translated = translator.translate(message.content, dest="ko")
-        tts_lang = "ko"
+    except:
+        translated = GoogleTranslator(source='auto', target='ko').translate(message.content)
+        tts_lang = 'ko'
 
-    text = translated.text
+    text = translated
 
     tts = gTTS(text=text, lang=tts_lang)
     tts.save("voice.mp3")
