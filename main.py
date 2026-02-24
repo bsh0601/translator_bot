@@ -123,6 +123,9 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
+    if message.content.startswith("!"):
+        return
+
     if not message.guild:
         return
 
