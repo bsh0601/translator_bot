@@ -2,9 +2,26 @@ import discord
 from discord.ext import commands, tasks
 from deep_translator import GoogleTranslator
 from gtts import gTTS
+from flask import Flask
+from threading import Thread
 import os
 import time
 import json
+
+# ----------------- 웹서버 (슬립 방지용) -----------------
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is alive!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+def keep_alive():
+    t = Thread(target=run_web)
+    t.start()
 
 # ----------------- 기본 설정 -----------------
 TOKEN = os.environ["DISCORD_TOKEN"]
@@ -51,7 +68,7 @@ async def on_ready():
     print(f"{bot.user} 준비 완료!")
     auto_disconnect.start()
 
-# ----------------- 자동 퇴장 (10분) -----------------
+# ----------------- 자동 퇴장 -----------------
 @tasks.loop(minutes=1)
 async def auto_disconnect():
     global last_used_time
@@ -69,7 +86,6 @@ async def auto_disconnect():
 @bot.command()
 async def 언어(ctx, lang_name):
     global target_language
-    
     if lang_name in language_map:
         target_language = language_map[lang_name]
         save_settings()
@@ -144,9 +160,7 @@ async def on_message(message):
         translated = GoogleTranslator(source='auto', target='ko').translate(message.content)
         tts_lang = 'ko'
 
-    text = translated
-
-    tts = gTTS(text=text, lang=tts_lang)
+    tts = gTTS(text=translated, lang=tts_lang)
     tts.save("voice.mp3")
 
     is_tts_playing = True
@@ -161,4 +175,6 @@ async def on_message(message):
 
     last_used_time = time.time()
 
+# ----------------- 실행 -----------------
+keep_alive()
 bot.run(TOKEN)

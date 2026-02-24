@@ -2,3 +2,4 @@ discord.py
 deep-translator
 gTTS
 PyNaCl
+Flask
