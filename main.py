@@ -33,14 +33,13 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 번역용 언어코드 (deep-translator용)
 language_map = {
-    "중국어": "zh-cn",
+    "중국어": "zh-CN",   # ← 여기 바뀜
     "영어": "en",
     "일본어": "ja"
 }
 
-target_language = "zh-cn"
+target_language = "zh-CN"
 tts_channel_id = None
 last_used_time = None
 is_tts_playing = False
@@ -59,7 +58,7 @@ def load_settings():
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
-            target_language = data.get("target_language", "zh-cn")
+            target_language = data.get("target_language", "zh-CN")
             tts_channel_id = data.get("tts_channel_id", None)
 
 # ----------------- 봇 준비 완료 -----------------
@@ -107,16 +106,6 @@ async def 퇴장(ctx):
         await ctx.voice_client.disconnect()
         await ctx.send("음성채널에서 나갔습니다.")
 
-@bot.command()
-async def 명령어(ctx):
-    commands_list = """
-현재 사용 가능한 명령어:
-1️⃣ !언어 중국어/영어/일본어 → 번역 언어 설정
-2️⃣ !채널지정 → 이 채널에서만 TTS 작동
-3️⃣ !퇴장 → 봇 음성 채널에서 나가기
-"""
-    await ctx.send(commands_list)
-
 # ----------------- 음성 채널 입장 -----------------
 async def join_voice_channel(message):
     if message.author.voice:
@@ -132,9 +121,9 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    await bot.process_commands(message)
-
+    # 명령어 처리
     if message.content.startswith("!"):
+        await bot.process_commands(message)
         return
 
     if not message.guild:
@@ -151,28 +140,24 @@ async def on_message(message):
     vc = message.guild.voice_client
 
     if is_tts_playing:
-        await message.reply("아직 기존 TTS가 끝나지 않았어요.")
         return
 
     try:
-        # 번역 (deep-translator는 소문자 사용)
+        # 🔥 번역용 언어코드는 소문자로 변환해서 사용
+        translate_target = target_language.lower()
+
         translated = GoogleTranslator(
             source='auto',
-            target=target_language
+            target=translate_target
         ).translate(message.content)
-
-        # gTTS용 언어코드 변환
-        if target_language == "zh-cn":
-            tts_lang = "zh-CN"
-        else:
-            tts_lang = target_language
 
     except Exception as e:
         print("번역 오류:", e)
-        translated = GoogleTranslator(source='auto', target='ko').translate(message.content)
-        tts_lang = "ko"
+        translated = message.content
 
-    # 음성 생성
+    # TTS 언어코드는 원래 값 사용
+    tts_lang = target_language
+
     tts = gTTS(text=translated, lang=tts_lang)
     tts.save("voice.mp3")
 
