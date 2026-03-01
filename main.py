@@ -1,3 +1,18 @@
+from flask import Flask
+import threading
+import os
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running"
+
+def run_web():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
+threading.Thread(target=run_web).start()
+
 import discord
 from discord.ext import commands, tasks
 from googletrans import Translator
