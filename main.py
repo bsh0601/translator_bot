@@ -4,7 +4,6 @@ import json
 import os
 from gtts import gTTS
 from deep_translator import GoogleTranslator
-from keep_alive import keep_alive
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -99,5 +98,4 @@ async def on_message(message):
 
     vc.play(discord.FFmpegPCMAudio("tts.mp3"))
 
-keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))
