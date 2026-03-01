@@ -4,7 +4,29 @@ import json
 import os
 from gtts import gTTS
 from deep_translator import GoogleTranslator
+from flask import Flask
+import threading
 
+# =========================
+# 🔥 Render Web Service용 웹서버
+# =========================
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+def keep_alive():
+    t = threading.Thread(target=run_web)
+    t.start()
+
+# =========================
+# Discord Bot 설정
+# =========================
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -75,7 +97,7 @@ async def on_message(message):
 
         print("번역 결과:", translated)
 
-        # 🔥 gTTS는 zh-CN 필요
+        # 🔥 중국어 TTS는 zh-CN 필요
         if target_language == "zh":
             tts_lang = "zh-CN"
         else:
@@ -98,4 +120,8 @@ async def on_message(message):
 
     vc.play(discord.FFmpegPCMAudio("tts.mp3"))
 
+# =========================
+# 🔥 실행
+# =========================
+keep_alive()
 bot.run(os.getenv("DISCORD_TOKEN"))
