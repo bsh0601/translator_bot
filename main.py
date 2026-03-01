@@ -11,7 +11,7 @@ def home():
 def run_web():
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
-threading.Thread(target=run_web).start()
+threading.Thread(target=run_web, daemon=True).start()
 
 import discord
 from discord.ext import commands, tasks
@@ -184,4 +184,4 @@ async def on_message(message):
 
     last_used_time = time.time()
 
-bot.run(TOKEN)
+bot.run(os.environ["DISCORD_TOKEN"])
