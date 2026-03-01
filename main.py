@@ -1,127 +1,172 @@
 import discord
-from discord.ext import commands
-import json
-import os
+from discord.ext import commands, tasks
+from googletrans import Translator
 from gtts import gTTS
-from deep_translator import GoogleTranslator
-from flask import Flask
-import threading
+import os
+import asyncio
+import time
+import json
 
-# =========================
-# 🔥 Render Web Service용 웹서버
-# =========================
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Bot is running"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-
-def keep_alive():
-    t = threading.Thread(target=run_web)
-    t.start()
-
-# =========================
-# Discord Bot 설정
-# =========================
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
-
+# 봇 토큰 (환경 변수 사용)
+TOKEN = os.environ["DISCORD_TOKEN"]
 SETTINGS_FILE = "settings.json"
 
+intents = discord.Intents.default()
+intents.message_content = True
+intents.voice_states = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+translator = Translator()
+
+language_map = {
+    "중국어": "zh-cn",
+    "영어": "en",
+    "일본어": "ja"
+}
+
+target_language = "zh-cn"
+tts_channel_id = None
+last_used_time = None
+is_tts_playing = False
+
+# ----------------- 설정 저장/불러오기 -----------------
+def save_settings():
+    data = {
+        "target_language": target_language,
+        "tts_channel_id": tts_channel_id
+    }
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(data, f)
+
 def load_settings():
-    if not os.path.exists(SETTINGS_FILE):
-        return {"target_language": "en", "tts_channel_id": None}
-    with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+    global target_language, tts_channel_id
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r") as f:
+            data = json.load(f)
+            target_language = data.get("target_language", "zh-cn")
+            tts_channel_id = data.get("tts_channel_id", None)
 
-def save_settings(data):
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
+# ----------------- 봇 이벤트 -----------------
 @bot.event
 async def on_ready():
-    print(f"{bot.user} 로그인 완료")
+    load_settings()
+    print(f"{bot.user} 준비 완료!")
+    auto_disconnect.start()
 
-@bot.command()
-async def 언어(ctx, lang):
-    settings = load_settings()
-
-    language_map = {
-        "영어": "en",
-        "일본어": "ja",
-        "중국어": "zh"
-    }
-
-    if lang not in language_map:
-        await ctx.send("지원 언어: 영어 / 일본어 / 중국어")
+# ----------------- 자동 퇴장 -----------------
+@tasks.loop(minutes=1)
+async def auto_disconnect():
+    global last_used_time
+    if last_used_time is None:
         return
+    
+    if time.time() - last_used_time > 600:  # 10분
+        for guild in bot.guilds:
+            if guild.voice_client:
+                await guild.voice_client.disconnect()
+        last_used_time = None
+        print("10분 미사용 → 자동 퇴장")
 
-    settings["target_language"] = language_map[lang]
-    save_settings(settings)
-
-    await ctx.send(f"{lang} 로 설정 완료!")
+# ----------------- 명령어 -----------------
+@bot.command()
+async def 언어(ctx, lang_name):
+    """번역 언어 설정"""
+    global target_language
+    
+    if lang_name in language_map:
+        target_language = language_map[lang_name]
+        save_settings()
+        await ctx.send(f"{lang_name}로 번역하도록 설정되었습니다.")
+    else:
+        await ctx.send("지원 언어: 중국어 / 영어 / 일본어")
 
 @bot.command()
 async def 채널지정(ctx):
-    settings = load_settings()
-    settings["tts_channel_id"] = ctx.channel.id
-    save_settings(settings)
-    await ctx.send("이 채널을 TTS 채널로 설정 완료!")
+    """TTS 채널 지정"""
+    global tts_channel_id
+    tts_channel_id = ctx.channel.id
+    save_settings()
+    await ctx.send("이 채널에서만 TTS가 작동합니다.")
 
+@bot.command()
+async def 퇴장(ctx):
+    """음성 채널에서 나가기"""
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("음성채널에서 나갔습니다.")
+
+@bot.command()
+async def 명령어(ctx):
+    """사용 가능한 명령어 안내"""
+    commands_list = """
+현재 사용 가능한 명령어:
+1️⃣ !언어 중국어/영어/일본어 → TTS 번역 언어 설정
+2️⃣ !채널지정 → 이 채널에서만 TTS 작동
+3️⃣ !퇴장 → 봇 음성 채널에서 나가기
+"""
+    await ctx.send(commands_list)
+
+# ----------------- 음성 채널 입장 -----------------
+async def join_voice_channel(message):
+    if message.author.voice:
+        channel = message.author.voice.channel
+        if not message.guild.voice_client:
+            await channel.connect()
+
+# ----------------- 메시지 이벤트 -----------------
 @bot.event
 async def on_message(message):
+    global last_used_time, is_tts_playing
+
     if message.author.bot:
         return
 
     await bot.process_commands(message)
 
-    settings = load_settings()
-    tts_channel_id = settings.get("tts_channel_id")
-    target_language = settings.get("target_language")
-
-    if message.channel.id != tts_channel_id:
+    if message.content.startswith("!"):
         return
 
-    if not message.author.voice:
+    if not message.guild:
         return
 
-    try:
-        translated = GoogleTranslator(
-            source="auto",
-            target=target_language
-        ).translate(message.content)
+    if tts_channel_id != message.channel.id:
+        return
 
-        print("번역 결과:", translated)
-
-        # 🔥 중국어 TTS는 zh-CN 필요
-        if target_language == "zh":
-            tts_lang = "zh-CN"
-        else:
-            tts_lang = target_language
-
-    except Exception as e:
-        print("번역 오류:", e)
-        translated = message.content
-        tts_lang = "ko"
-
-    tts = gTTS(text=translated, lang=tts_lang)
-    tts.save("tts.mp3")
-
-    voice_channel = message.author.voice.channel
+    await join_voice_channel(message)
 
     if not message.guild.voice_client:
-        vc = await voice_channel.connect()
+        return
+
+    vc = message.guild.voice_client
+
+    if is_tts_playing:
+        await message.reply("아직 기존 TTS가 끝나지 않았어요.")
+        return
+
+    detected = translator.detect(message.content)
+
+    if detected.lang == "ko":
+        translated = translator.translate(message.content, dest=target_language)
+        tts_lang = target_language
     else:
-        vc = message.guild.voice_client
+        translated = translator.translate(message.content, dest="ko")
+        tts_lang = "ko"
 
-    vc.play(discord.FFmpegPCMAudio("tts.mp3"))
+    text = translated.text
 
-# =========================
-# 🔥 실행
-# =========================
-keep_alive()
-bot.run(os.getenv("DISCORD_TOKEN"))
+    tts = gTTS(text=text, lang=tts_lang)
+    tts.save("voice.mp3")
+
+    is_tts_playing = True
+
+    def after_playing(error):
+        global is_tts_playing
+        is_tts_playing = False
+        if os.path.exists("voice.mp3"):
+            os.remove("voice.mp3")
+
+    vc.play(discord.FFmpegPCMAudio("voice.mp3"), after=after_playing)
+
+    last_used_time = time.time()
+
+bot.run(TOKEN)
