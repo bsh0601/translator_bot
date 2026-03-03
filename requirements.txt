@@ -2,3 +2,4 @@ flask
 discord.py
 googletrans==4.0.0-rc1
 gtts
+PyNaCl
