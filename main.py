@@ -13,6 +13,9 @@ def run_web():
 
 threading.Thread(target=run_web, daemon=True).start()
 
+# 🔥 ffmpeg 실행권한 보장 (Render 리눅스용)
+os.system("chmod +x ffmpeg")
+
 import discord
 from discord.ext import commands, tasks
 from googletrans import Translator
@@ -21,7 +24,6 @@ import asyncio
 import time
 import json
 
-# 봇 토큰
 TOKEN = os.environ["DISCORD_TOKEN"]
 SETTINGS_FILE = "settings.json"
 
@@ -150,40 +152,44 @@ async def on_message(message):
     vc = message.guild.voice_client
 
     if is_tts_playing:
-        await message.reply("아직 기존 TTS가 끝나지 않았어요.")
-        return
+        return  # 반복 메시지 방지 (이전처럼 reply 안함)
 
-    detected = translator.detect(message.content)
+    try:
+        detected = translator.detect(message.content)
 
-    if detected.lang == "ko":
-        translated = translator.translate(message.content, dest=target_language)
-        tts_lang = target_language
-    else:
-        translated = translator.translate(message.content, dest="ko")
-        tts_lang = "ko"
+        if detected.lang == "ko":
+            translated = translator.translate(message.content, dest=target_language)
+            tts_lang = target_language
+        else:
+            translated = translator.translate(message.content, dest="ko")
+            tts_lang = "ko"
 
-    text = translated.text
+        text = translated.text
 
-    tts = gTTS(text=text, lang=tts_lang)
-    tts.save("voice.mp3")
+        tts = gTTS(text=text, lang=tts_lang)
+        tts.save("voice.mp3")
 
-    is_tts_playing = True
+        is_tts_playing = True
 
-    def after_playing(error):
-        global is_tts_playing
-        is_tts_playing = False
-        if os.path.exists("voice.mp3"):
-            os.remove("voice.mp3")
+        def after_playing(error):
+            global is_tts_playing
+            is_tts_playing = False
+            if os.path.exists("voice.mp3"):
+                os.remove("voice.mp3")
 
-    # 🔥 여기 수정된 부분
-    vc.play(
-        discord.FFmpegPCMAudio(
-            source="voice.mp3",
-            executable="./ffmpeg"
-        ),
-        after=after_playing
-    )
+        vc.play(
+            discord.FFmpegPCMAudio(
+                source="voice.mp3",
+                executable="./ffmpeg"
+            ),
+            after=after_playing
+        )
 
-    last_used_time = time.time()
+        last_used_time = time.time()
+
+    except Exception as e:
+        print("TTS 오류:", e)
+        if vc.is_connected():
+            await vc.disconnect()
 
 bot.run(TOKEN)
