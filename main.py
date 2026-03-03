@@ -17,12 +17,11 @@ import discord
 from discord.ext import commands, tasks
 from googletrans import Translator
 from gtts import gTTS
-import os
 import asyncio
 import time
 import json
 
-# 봇 토큰 (환경 변수 사용)
+# 봇 토큰
 TOKEN = os.environ["DISCORD_TOKEN"]
 SETTINGS_FILE = "settings.json"
 
@@ -75,7 +74,7 @@ async def auto_disconnect():
     if last_used_time is None:
         return
     
-    if time.time() - last_used_time > 600:  # 10분
+    if time.time() - last_used_time > 600:
         for guild in bot.guilds:
             if guild.voice_client:
                 await guild.voice_client.disconnect()
@@ -85,7 +84,6 @@ async def auto_disconnect():
 # ----------------- 명령어 -----------------
 @bot.command()
 async def 언어(ctx, lang_name):
-    """번역 언어 설정"""
     global target_language
     
     if lang_name in language_map:
@@ -97,7 +95,6 @@ async def 언어(ctx, lang_name):
 
 @bot.command()
 async def 채널지정(ctx):
-    """TTS 채널 지정"""
     global tts_channel_id
     tts_channel_id = ctx.channel.id
     save_settings()
@@ -105,14 +102,12 @@ async def 채널지정(ctx):
 
 @bot.command()
 async def 퇴장(ctx):
-    """음성 채널에서 나가기"""
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.send("음성채널에서 나갔습니다.")
 
 @bot.command()
 async def 명령어(ctx):
-    """사용 가능한 명령어 안내"""
     commands_list = """
 현재 사용 가능한 명령어:
 1️⃣ !언어 중국어/영어/일본어 → TTS 번역 언어 설정
@@ -180,8 +175,15 @@ async def on_message(message):
         if os.path.exists("voice.mp3"):
             os.remove("voice.mp3")
 
-    vc.play(discord.FFmpegPCMAudio("voice.mp3"), after=after_playing)
+    # 🔥 여기 수정된 부분
+    vc.play(
+        discord.FFmpegPCMAudio(
+            source="voice.mp3",
+            executable="./ffmpeg"
+        ),
+        after=after_playing
+    )
 
     last_used_time = time.time()
 
-bot.run(os.environ["DISCORD_TOKEN"])
+bot.run(TOKEN)
